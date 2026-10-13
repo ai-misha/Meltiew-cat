@@ -1,11 +1,11 @@
 class_name CheatMenu
 extends CanvasLayer
-## Client-side cheat menu. Toggle with F2 (not F1 — that's used by Godot debug).
-## Anticheat notes (playground, server-side):
-##   - Horizontal speed flagged if > ~25 m/s over 1 s, ~60 m/s over 3 s.
-##   - Fly is NOT checked on playground (grounded=undefined → check skipped).
-##   - Ceiling at 90 m (fly up, then stop before it).
-##   - Studio places DO check fly — enable with caution there.
+## Client-side cheat menu. Toggle with F2.
+##
+## Anticheat is disabled by default on the server (game.js:218):
+##   this.anticheat = process.env.MELTIEW_ANTICHEAT === '1';
+## So all positions are accepted unconditionally unless the server sets
+## MELTIEW_ANTICHEAT=1. Fly, speed and noclip are fully free.
 
 var player: LocalPlayer
 
@@ -19,16 +19,19 @@ var fly_mode := false
 var noclip := false
 var bhop_mode := false
 
-const BOOST_WALK := 14.0    # horizontal: 14 m/s well under 25.25 m/s 1-sec limit
-const BOOST_SPRINT := 16.5  # same for sprint; fly uses maxf(admin_speed, 24) so set it lower
-const FLY_SPEED := 14.0     # admin_speed for fly; actual = 14 * 1.6 sprint = 22.4 — safe
+# Fly: local_player._fly() uses maxf(admin_speed, 24.0) — set above 24 to go faster.
+# Set to 0 when off so it doesn't interfere with admin panels.
+const FLY_ADMIN_SPEED := 0.0   # 0 → maxf(0, 24) = 24 m/s base, 38.4 with sprint
+const SPEED_BOOST_WALK := 20.0
+const SPEED_BOOST_SPRINT := 20.0
 
 var _orig_walk := LocalPlayer.MAX_SPEED
 var _orig_sprint := LocalPlayer.SPRINT_SPEED
 var _orig_stamina := 100.0
 var _orig_bhop_max := 24.0
+var _orig_admin_speed := 0.0
 
-var _btns: Dictionary = {}  # cheat name → CheckButton
+var _btns: Dictionary = {}
 
 
 func _ready() -> void:
@@ -64,21 +67,21 @@ func _build_ui() -> void:
 	title.add_theme_font_size_override("font_size", 15)
 	vbox.add_child(title)
 
-	var sep := HSeparator.new()
-	vbox.add_child(sep)
+	vbox.add_child(HSeparator.new())
 
-	_make_btn(vbox, "God Mode", "Infinite HP (client health only)", _set_god)
-	_make_btn(vbox, "Inf Stamina", "No sprint exhaustion", _set_stamina)
-	_make_btn(vbox, "Speed Boost", "Walk/sprint at safe max (~16 m/s)", _set_speed)
-	_make_btn(vbox, "Fly", "Admin flight (safe on playground)", _set_fly)
-	_make_btn(vbox, "Noclip", "Disable own collision locally", _set_noclip)
-	_make_btn(vbox, "Bhop", "Bunny-hop with boosted cap", _set_bhop)
+	_make_btn(vbox, "God Mode",     "Block all incoming damage",      _set_god)
+	_make_btn(vbox, "Inf Stamina",  "No sprint exhaustion ever",      _set_stamina)
+	_make_btn(vbox, "Speed Boost",  "Walk/sprint at 20 m/s",          _set_speed)
+	_make_btn(vbox, "Fly",          "Admin flight (Q/E up-down, sprint to go faster)", _set_fly)
+	_make_btn(vbox, "Noclip",       "Disable own collision locally",  _set_noclip)
+	_make_btn(vbox, "Bhop",         "Bunny-hop with no speed cap",    _set_bhop)
 
-	var hint := Label.new()
-	hint.text = "Fly: stay below 90 m on playground"
-	hint.add_theme_font_size_override("font_size", 10)
-	hint.modulate = Color(0.7, 0.7, 0.7)
-	vbox.add_child(hint)
+	vbox.add_child(HSeparator.new())
+	var note := Label.new()
+	note.text = "Anticheat: OFF by default\n(needs MELTIEW_ANTICHEAT=1)"
+	note.add_theme_font_size_override("font_size", 10)
+	note.modulate = Color(0.55, 1.0, 0.55)
+	vbox.add_child(note)
 
 
 func _make_btn(parent: VBoxContainer, label: String, tip: String, cb: Callable) -> void:
@@ -103,9 +106,8 @@ func _process(_delta: float) -> void:
 
 func _set_god(on: bool) -> void:
 	god_mode = on
-	if not player:
-		return
-	player.god_mode = on
+	if player:
+		player.god_mode = on
 
 
 func _set_stamina(on: bool) -> void:
@@ -114,7 +116,7 @@ func _set_stamina(on: bool) -> void:
 		return
 	if on:
 		_orig_stamina = player.max_stamina
-		player.max_stamina = 0.0  # 0 = endless (see local_player.gd _update_stamina)
+		player.max_stamina = 0.0  # 0 = endless (local_player.gd _update_stamina)
 	else:
 		player.max_stamina = _orig_stamina
 
@@ -126,8 +128,8 @@ func _set_speed(on: bool) -> void:
 	if on:
 		_orig_walk = player.walk_speed
 		_orig_sprint = player.sprint_speed
-		player.walk_speed = BOOST_WALK
-		player.sprint_speed = BOOST_SPRINT
+		player.walk_speed = SPEED_BOOST_WALK
+		player.sprint_speed = SPEED_BOOST_SPRINT
 	else:
 		player.walk_speed = _orig_walk
 		player.sprint_speed = _orig_sprint
@@ -138,17 +140,17 @@ func _set_fly(on: bool) -> void:
 	if not player:
 		return
 	if on:
-		player.admin_speed = FLY_SPEED
+		_orig_admin_speed = player.admin_speed
+		player.admin_speed = FLY_ADMIN_SPEED  # 0 → uses 24 m/s floor in _fly()
 	else:
-		player.admin_speed = 0.0
+		player.admin_speed = _orig_admin_speed
 	player.flying = on
 
 
 func _set_noclip(on: bool) -> void:
 	noclip = on
-	if not player:
-		return
-	player._collision.disabled = on
+	if player:
+		player._collision.disabled = on
 
 
 func _set_bhop(on: bool) -> void:
@@ -158,7 +160,7 @@ func _set_bhop(on: bool) -> void:
 	if on:
 		_orig_bhop_max = player.bhop_max
 		player.bhop = true
-		player.bhop_max = 30.0  # safe: horizontal ~25 m/s still within 1-sec window
+		player.bhop_max = 999.0  # no cap — anticheat is off
 	else:
 		player.bhop = false
 		player.bhop_max = _orig_bhop_max
