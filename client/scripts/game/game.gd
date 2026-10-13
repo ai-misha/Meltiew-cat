@@ -123,6 +123,10 @@ func _ready() -> void:
 	menu.reset_requested.connect(func(): player.die())
 	menu.leave_requested.connect(_confirm_leave)
 	menu.settings_changed.connect(_apply_quality)
+
+	var cheats := CheatMenu.new()
+	cheats.player = player
+	add_child(cheats)
 	Session.settings_changed.connect(_on_settings_changed)
 	_apply_quality()
 

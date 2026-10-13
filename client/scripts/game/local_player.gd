@@ -126,6 +126,8 @@ var flying := false
 var admin_speed := 0.0
 ## Humanoid.Floating: hang in the air where you are, no gravity, no walking.
 var floating := false
+## Cheat: ignore incoming damage (set by CheatMenu).
+var god_mode := false
 ## Player:Glide in progress: {from, to, t, dur}, empty when not gliding.
 var _glide := {}
 
@@ -457,7 +459,7 @@ func current_anim() -> String:
 
 
 func take_damage(amount: float) -> void:
-	if dead or amount <= 0.0:
+	if dead or amount <= 0.0 or god_mode:
 		return
 	hp = maxf(hp - amount, 0.0)
 	_since_hurt = 0.0
