@@ -90,21 +90,22 @@ func _build_ui() -> void:
 		_panel.position = Vector2(12, 12)
 	add_child(_panel)
 
-	var scroll := ScrollContainer.new()
-	if _mobile:
-		scroll.custom_minimum_size = Vector2(200, 0)
-		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	_panel.add_child(scroll)
-
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 6)
-	if not _mobile:
+
+	if _mobile:
+		# Wrap in a scroll container so it fits on small screens.
+		var scroll := ScrollContainer.new()
+		scroll.custom_minimum_size = Vector2(200, 320)
+		_panel.add_child(scroll)
+		scroll.add_child(vbox)
+	else:
 		var title := Label.new()
 		title.text = "Cheats  [F2]"
 		title.add_theme_font_size_override("font_size", 15)
 		vbox.add_child(title)
 		vbox.add_child(HSeparator.new())
-	scroll.add_child(vbox)
+		_panel.add_child(vbox)
 
 	_make_btn(vbox, "God Mode",    "Block all incoming damage",               _set_god)
 	_make_btn(vbox, "Inf Stamina", "No sprint exhaustion",                    _set_stamina)
